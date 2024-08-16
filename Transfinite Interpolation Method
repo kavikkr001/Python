@@ -1,0 +1,201 @@
+# Importing the required libraries
+import numpy as np
+import matplotlib.pyplot as plt
+
+# defining the computational domain
+L = 1   # length (zeta) in computational domain
+H = 1   # height (eta) in computational domain
+N = 101 # divisions in zeta direction
+M = 26 # divisions in eta direction
+
+e01= []  # this is used to store the values of the difference between psi at new time step
+          # and psi old time step, it will be used to plot the residuals
+
+z = np.linspace(0, L, N)  # spliting the zeta into N equal spacing grid lines
+e = np.linspace(0, H, M)  # spliting the eta into M equal spacing grid lines
+
+E,Z = np.meshgrid(e, z)  # creating the mesh in computation domain
+
+# ploting syntax for visualizing the mesh in computational domain
+plt.figure()
+plt.plot(Z,E)
+plt.plot(Z.T,E.T)
+plt.title('Computational Domain Mesh')
+plt.show
+
+# defining the physical domain
+x = np.zeros(np.shape(Z))
+y = np.zeros(np.shape(E))
+
+# Transforming the coordinated from computation domain into physical domain by using the
+# functions obtained from Transfinite interpolation method
+x = 4*Z
+for i in range(N):
+  for j in range(M):
+    if 0.24 <= z[i] <= 0.75:
+      y[i,j] = E[i,j]+(1-E[i,j])*(1-np.cos((4*z[i]-1)*np.pi))/10
+    else:
+      y[i,j] = E[i,j]
+
+# ploting syntax for visualizing the mesh in physical domain
+plt.figure()
+plt.plot(x,y)
+plt.plot(x.T,y.T)
+plt.title('Physical Domain Mesh')
+plt.show
+
+# below function is used to calculate the stream function at new time step
+def calc_psi():
+  p_new = np.zeros((N, M)) # pre-allocating the psi under P_new variable
+
+  # pre-allocation for coefficients obtained during tranforming of stream function
+  # equation from physical coordinates into computational coordinates
+  A = np.zeros((N, M))
+  B = np.zeros((N, M))
+  C = np.zeros((N, M))
+
+  # cell size in computational domain
+  dz = 1/(N-1)
+  de = 1/(M-1)
+
+  p_new[:, 25] = 100  # define the psi at upper boundary equal to 100
+  for i in range(N):
+    p_new[i, :] = np.linspace(p_new[i, 0], p_new[i, 25], 26) # this line will distribute the psi, which is P_new, from lower wall to upper wall
+
+  # calculating the coefficients obtained in tranformed govening equations
+  for i in range(N):
+    for j in range(M):
+      if 0.24 <= z[i] <= 0.75:
+        A[i,j] = (10*np.pi*(1-y[i,j])*np.sin(np.pi*x[i,j]))/(9-np.cos(np.pi*x[i,j]))**2
+        B[i,j] = (10*np.pi**2*(y[i,j]-1)*(np.sin(np.pi*x[i,j])**2+1-9*np.cos(np.pi*x[i,j])))/(9-np.cos(np.pi*x[i,j]))**3
+        C[i,j] = (10/(9-np.cos(np.pi*x[i,j])))**2
+      else:
+        A[i,j] = 0
+        B[i,j] = 0
+        C[i,j] = 1
+
+  t = 0  # initially give the time t = 0 i.e., starting the time loop
+  t_end = 3000  # final time to end the loop if the convergence criteria is not achieved
+  while t <= t_end:
+    p_old = p_new.copy() # copying the new psi values to old values for proceding with interation
+
+    # below defined the formula for calculating psi at new time levels
+    for i in range(1,N-1):
+      for j in range(1,M-1):
+        # E and F are defined for simplicity and mentioned in report
+        E = (p_old[i+1,j+1] + p_new[i-1,j-1] - p_old[i-1,j+1] - p_old[i+1,j-1])/(4*dz*de)
+        F = (p_old[i,j+1] - p_new[i,j-1])/(2*de)
+
+        # this will calculate psi at new time step
+        p_new[i,j] = ((0.0625 * (p_old[i+1,j] + p_new[i-1,j])/dz**2) + (A[i,j] * E * 0.5) + (B[i,j] * F) + ((p_old[i,j+1] + p_new[i,j-1])*A[i,j]**2/de**2) +
+                      ((p_old[i,j+1] + p_new[i,j-1])*C[i,j]/de**2))/((0.125/dz**2) + (2*A[i,j]**2/de**2) + (2*C[i,j]/de**2))
+
+    error= np.sum(np.abs(p_new - p_old)) # this will calculate difference between new time step psi and old time step psi
+    e01.append(np.log10(np.max(error))) # it will add the error value into the previously defined e01
+
+    if np.max(error) < 1e-5: # if error is less than 1e-5, than it will break the time loop.
+      break
+    t += 1 # it will increase the time step.
+  print('Total number of iterations = ',t) # this will give the number of iterations are used in the simulation
+  return p_new , e01  # so this function gives output as psi and difference between new time step psi and old time step psi
+
+psi, e1 = calc_psi() # the obtained P_new and e01 is now shift to psi and e1. This won't disturv the P_new, e01
+
+# below function is used to calculate he velocities in physical domain
+def results():
+
+  # this will define the cell sizes in physical domain
+  dx = 4/(N-1)
+  dy = 1/(M-1)
+
+  # pre-allocating the x and y componenet of velocities
+  u = np.zeros((N, M))
+  v = np.zeros((N, M))
+
+  dpsi_dx, dpsi_dy = np.gradient(psi, dy, dx) # this will calculate the differentials of psi with respect x and y
+                                              # by using gradient
+
+  u = dpsi_dy  # differential of psi with respect to y gives the x-component of velocity
+  v = -dpsi_dx # differential of psi with respect to x gives the y-component of velocity
+
+  return u , v # so this function gives the output as x and y components of velocity
+
+u1 , v1 =results() # the above obtained velocity components is now shifted to u1 and v1 respectively, so this won't disturb the u and v
+
+V = np.sqrt(u1**2 + v1**2) # this will calculate the total velocity using u1 and v1.
+
+# below plotting syntax is for Stream function contour in Physical domain
+plt.figure()
+plt.contourf(x,y,psi,levels=100,cmap = 'jet')
+plt.colorbar()
+plt.title('Stream function contour in Physical domain')
+plt.show()
+
+# below plotting syntax is for Stream function contour in computational domain
+plt.figure()
+plt.contourf(Z,E,psi,levels=100,cmap = 'jet')
+plt.colorbar()
+plt.title('Stream function contour in computational domain')
+plt.show()
+
+# below plotting syntax is for Error vs. Iteration
+plt.figure()
+plt.plot(range(len(e01)), e1)
+plt.xlabel('Iteration')
+plt.ylabel('Log10(Error)')
+plt.title('Error vs. Iteration')
+plt.grid(True)
+plt.show()
+
+# below plotting syntax is for variation of stream function contour at specified x locations,
+# below 12, 25, 50, 75, 87 are the x = 0.5, 1, 2, 3, 3,5 respectively
+plt.figure()
+plt.plot(psi[12], y[12], label="x=0.5")
+plt.plot(psi[25], y[25], label="x=1.0")
+plt.plot(psi[50], y[50], label="x=2.0")
+plt.plot(psi[75], y[75], label="x=3.0")
+plt.plot(psi[87], y[87], label="x=3.5")
+plt.title("Variation of ψ ")
+plt.xlabel("ψ")
+plt.ylabel("y")
+plt.legend()
+plt.show()
+
+# below plotting syntax is for variation of x-velocity component at specified x locations
+plt.figure()
+plt.plot(u1[12], y[12], label="x=0.5")
+plt.plot(u1[25], y[25], label="x=1.0")
+plt.plot(u1[50], y[50], label="x=2.0")
+plt.plot(u1[75], y[75], label="x=3.0")
+plt.plot(u1[87], y[87], label="x=3.5")
+plt.title("Variation of x-component of total velocity ")
+plt.xlabel("u")
+plt.ylabel("y")
+plt.legend()
+plt.show()
+
+# below plotting syntax is for variation of y-velocity component at specified x locations
+plt.figure()
+plt.plot(v1[12], y[12], label="x=0.5")
+plt.plot(v1[25], y[25], label="x=1.0")
+plt.plot(v1[50], y[50], label="x=2.0")
+plt.plot(v1[75], y[75], label="x=3.0")
+plt.plot(v1[87], y[87], label="x=3.5")
+plt.title("Variation of y-component of total velocity ")
+plt.xlabel("v")
+plt.ylabel("y")
+plt.legend()
+plt.show()
+
+# below plotting syntax is for variation of Total velocity at specified x locations
+plt.figure()
+plt.plot(V[12], y[12], label="x=0.5")
+plt.plot(V[25], y[25], label="x=1.0")
+plt.plot(V[50], y[50], label="x=2.0")
+plt.plot(V[75], y[75], label="x=3.0")
+plt.plot(V[87], y[87], label="x=3.5")
+plt.title("Variation of Total velocity ")
+plt.xlabel("V")
+plt.ylabel("y")
+plt.legend()
+plt.show()
