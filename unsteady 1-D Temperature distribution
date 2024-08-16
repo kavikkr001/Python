@@ -1,0 +1,201 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+L = 1                       # Length of the wall
+TT = 1800                   # Total Time
+dx = 0.02                   # Grid size
+IM = int(L/dx) +1        # Grid points in x-direction
+alpha = 2.6*10**(-6)            # diffusivity
+dt = 0.5*dx**2/alpha            # Time step
+NT = round(TT/dt) +1        # Grid points for Time
+b = alpha*dt/dx**2
+T_num = np.zeros((NT,IM))   # pre-allocating the Temerature
+d_new = np.zeros((NT,IM))
+x = np.linspace(0,L,IM)
+
+Ti = 40                    # initial temperature
+Ts = 200                   # surface temperature
+
+# initial condition
+
+for i in range(1,IM-1):
+  T_num[0,i] = Ti
+
+# Boundary conditions
+
+for n in range(0,NT):
+  T_num[n,0] = Ts
+  T_num[n,IM-1] = Ts
+
+
+# FTCS(Forward Time Central Space)
+
+def FTCS(NT,IM,b,T_new1):
+  for n in range(0,NT-1):
+    T_old1 = T_new1.copy()
+    for i in range(1,IM-1):
+      T_new1[n+1,i] = T_old1[n,i] + b*(T_old1[n,i+1] - 2*T_old1[n,i] + T_old1[n,i-1])
+  return T_new1
+
+
+# CN(Crank - Nicolson)
+
+def CN(NT, IM, b, T_new2):
+  a = -(0.5 * b)   # calculating the coefficients elements of the matrix
+  v = 1 + b   # here i assign v instead of b, b variable is used to calculate the alpha*dt/dx^2
+  c = a
+  A = np.zeros((IM-2, IM-2)) # pre-allocating the coefficient matrix with zeros
+  B = np.zeros((NT, IM-2))  # pre-allocating the known temperature matrix with zeros
+  for i in range(1, IM-1):
+    A[i-1, i-1] = v        # updating the coefficient matrix
+    if (i < IM - 2):
+      A[i, i-1] = c
+      A[i-1, i] = a
+  A_inv = np.linalg.inv(A)
+  T_old=T_new2.copy()
+  for n in range(0, NT-1):
+    T_old[n] = T_new2[n].copy()
+    for i in range(1, IM-1):
+      B[n, i-1] = 0.5 * b * (T_old[n, i+1] - 2 * T_old[n, i] + T_old[n, i-1]) + T_old[n, i]
+      if i == 1:
+        B[n, i-1] -= (c * Ts)
+      elif i == IM - 2:
+        B[n, i-1] -= (a * Ts)
+    T_new2[n+1, 1:IM-1] = np.dot(A_inv, B[n])
+
+  return T_new2
+
+
+T1= FTCS(NT,IM,b,T_num.copy())           # calling the FTCS scheme by pasing the required aruguments
+T2 = CN(NT,IM,b,T_num.copy())            # calling the Crank-Nicolson scheme by paasing the required aruguments
+
+# Exact solution
+
+def exact(x,t):
+  T_exact = 0
+  for m in range(1,100):
+    T_exact += np.exp((-(m*np.pi/L)**2)*(alpha*t)) * (1 - (-1)**m) / (m * np.pi) * np.sin(m * np.pi * x / L)
+  return Ts + 2*(Ti - Ts)*T_exact
+
+# calling the exact solution by passing the time t = 0,1(360 seconds), 0.3(1080 seconds)
+# t = 0.5(1080 seconds) hours
+ex_0_1 = exact(x,360)
+ex_0_3 = exact(x,1080)
+ex_0_5 = exact(x,1800)
+
+# er_0_1 & 3 & 5 are used to calculate the error between computed values and
+# analytical values for 0.1 & 0.3 & 0.5 hours respectively for FTCS scheme
+
+er_0_1 = np.abs((ex_0_1 - T1[int(360/dt),:])/ex_0_1)
+er_0_3 = np.abs((ex_0_3 - T1[int(1080/dt),:])/ex_0_3)
+er_0_5 = np.abs((ex_0_5 - T1[int(NT-1),:])/ex_0_5)
+
+# er_0_01 & 03 & 05 are used to calculate the error between computed values and
+# analytical values for 0.1 & 0.3 & 0.5 hours respectively for Crank-Nicolson scheme
+
+er_0_01 = np.abs((ex_0_1 - T2[int(360/dt),:])/ex_0_1)
+er_0_03 = np.abs((ex_0_3 - T2[int(1080/dt),:])/ex_0_3)
+er_0_05 = np.abs((ex_0_5 - T2[int(NT-1),:])/ex_0_5)
+
+# plotting
+
+# under explicit FTCS, three different graphs for computed valued are plotted
+# for 0.1, 0.3 and 0.5 hours along with the exact solution
+
+# explicit FTCS
+plt.figure()
+plt.plot(x,T1[int(360/dt),:],label = 't = 0.1 Hour for computed')
+plt.plot(x,ex_0_1,label = 't = 0.1 Hour for analytical')
+plt.xlabel('Position along Length (M)')
+plt.ylabel('Temperature (℃)')
+plt.title('Explicit FTCS with theoretical temperature distribution for 0.1 hour')
+plt.legend()
+plt.grid(True)
+plt.show
+
+plt.figure()
+plt.plot(x,T1[int(1080/dt),:],label = 't = 0.3 Hour for computed')
+plt.plot(x,ex_0_3,label = 't = 0.3 Hour for analytical')
+plt.xlabel('Position along Length (M)')
+plt.ylabel('Temperature (℃)')
+plt.title('Explicit FTCS with theoretical temperature distribution for 0.3 hour')
+plt.legend()
+plt.grid(True)
+plt.show
+
+plt.figure()
+plt.plot(x,T1[int(NT-1),:],label = 't = 0.5 Hour for computed')
+plt.plot(x,ex_0_5,label = 't = 0.5 Hour for analytical')
+plt.xlabel('Position along Length (M)')
+plt.ylabel('Temperature (℃)')
+plt.title('Explicit FTCS with theoretical temperature distribution for 0.5 hour')
+plt.legend()
+plt.grid(True)
+plt.show
+
+# under Crank - Nicolson three different graphs for computed valued are plotted
+# for 0.1, 0.3 and 0.5 hours along with the exact solution
+
+# Crank - Nicolson
+
+plt.figure()
+plt.plot(x,T2[int(360/dt),:],label = 't = 0.1 Hour for computed')
+plt.plot(x,ex_0_1,label = 't = 0.1 Hour for analytical')
+plt.xlabel('Position along Length (M)')
+plt.ylabel('Temperature (℃)')
+plt.title('Crank-Nicolson with theoretical temperature distribution for 0.1 hour')
+plt.legend()
+plt.grid(True)
+plt.show
+
+plt.figure()
+plt.plot(x,T2[int(1080/dt),:],label = 't = 0.3 Hour for computed')
+plt.plot(x,ex_0_3,label = 't = 0.3 Hour for analytical')
+plt.xlabel('Position along Length (M)')
+plt.ylabel('Temperature (℃)')
+plt.title('Crank-Nicolson with theoretical temperature distribution for 0.3 hour')
+plt.legend()
+plt.grid(True)
+plt.show
+
+plt.figure()
+plt.plot(x,T2[int(NT-1),:],label = 't = 0.5 Hour for computed')
+plt.plot(x,ex_0_5,label = 't = 0.5 Hour for analytical')
+plt.xlabel('Position along Length (M)')
+plt.ylabel('Temperature (℃)')
+plt.title('Crank-Nicolson with theoretical temperature distribution for 0.5 hour')
+plt.legend()
+plt.grid(True)
+plt.show
+
+# under error plot, first error graph for FTCS are plotted and then error graph
+# Crank-Nicolson are plotted
+
+# error plot
+
+# error graph for FTCS
+
+plt.figure()
+plt.plot(x,er_0_1,label = 'error for 0.1 hour')
+plt.plot(x,er_0_3,label = 'error for 0.3 hour')
+plt.plot(x,er_0_5,label = 'error for 0.5 hour')
+plt.xlabel('Position along Length (M)')
+plt.ylabel('error value')
+plt.title('error for explicit FTCS with different time instances')
+plt.legend()
+plt.grid(True)
+plt.show
+
+# error graph for Crank-Nicolson
+
+plt.figure()
+plt.plot(x,er_0_01,label = 'error for 0.1 hour')
+plt.plot(x,er_0_03,label = 'error for 0.3 hour')
+plt.plot(x,er_0_05,label = 'error for 0.5 hour')
+plt.xlabel('Position along Length (M)')
+plt.ylabel('error value')
+plt.title('error for Crank-Nicolson with different time instances')
+plt.legend()
+plt.grid(True)
+plt.show
+
