@@ -1,0 +1,221 @@
+#*******************************************************************************
+#Libraries
+#*******************************************************************************
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+#*******************************************************************************
+# Parameters
+#*******************************************************************************
+
+L = 1                                 # Length of the plate
+H = 2                                 # Heigth of the plate
+IM = 41                               # Mesh points in L-direction
+JM = 81                               # Mesh points in H-direction
+dx = L/(IM-1)                         # Mesh size in L-direction
+dy = H/(JM-1)                         # Mesh size in H-direction
+b = dx/dy                             # Beta
+a = ((np.cos(np.pi/(IM-1))+(b**2)*np.cos(np.pi/(JM-1)))/(1+(b**2)))**2
+x = np.linspace(0,L,IM)
+y = np.linspace(0,H,JM)
+T_num = np.zeros((IM, JM))           # It is used for Initializing the Temperature values and passed these values to T_new variable
+ω_opt = (2-(2*np.sqrt(1-a)))/(a)     # ω_opt
+e01 = []                             # To get error values for PJ Scheme
+e02 = []                             # To get error values for PSG scheme
+e03 = []                             # To get error values for PSOR scheme
+
+#*******************************************************************************
+# Numerical solution
+#*******************************************************************************
+
+# Boundary conditions
+
+for i in range(0,IM):
+  T_num[i,0] = 250            # it defines the temperature along the bottom side.
+  T_num[i,JM-1] = 0           # it defines the temperature along the top side.
+
+for j in range(0,JM):
+  T_num[0,j] = 0              # it defines the temperature along the right side.
+  T_num[IM-1,j] = 0           # it defines the temperature along the left side.
+
+# Initialization
+
+for i in range(1,IM):
+  for j in range(1,JM):
+    T_num[i,j] = 0           # it defines the values of mesh points which is inside.
+
+
+# Point Jacobi (PJ)
+
+def PJ(IM,JM,b,T_new1):
+  for t in range(0,30000):
+    T_old1 = T_new1.copy()
+    for i in range(1,IM-1):
+      for  j in range(1,JM-1):
+        T_new1[i,j] = (1/(2*(1+b**2)))*(T_old1[i+1,j]+T_old1[i-1,j]+(b**2)*T_old1[i,j+1]+(b**2)*T_old1[i,j-1])
+    error= np.sum(np.abs(T_new1 - T_old1))
+    e01.append(np.log10(np.max(error)))
+    if np.max(error) < 1e-3:
+      break
+  print("Number of iterations used in Point Jacobi scheme is ",t)
+  return T_new1, e01
+
+# Point Gauss Seidal (PGS)
+
+def PGS(IM,JM,b,T_new2):
+  for t in range(0,30000):
+    T_old2 = T_new2.copy()
+    for i in range(1,IM-1):
+      for  j in range(1,JM-1):
+        T_new2[i,j] = (1/(2*(1+b**2)))*(T_old2[i+1,j]+T_new2[i-1,j]+(b**2)*T_old2[i,j+1]+(b**2)*T_new2[i,j-1])
+    error = np.sum(np.abs(T_new2 - T_old2))
+    e02.append(np.log10(np.max(error)))
+    if np.max(error) < 1e-3:
+      break
+  print("Number of iterations used in Point Gauss Seidal scheme is ",t)
+  return T_new2, e02
+
+# Point Successive Over Relaxation (PSOR)
+
+def PSOR(IM,JM,b,T_new3,ω_opt):
+  for t in range(0,30000):
+    T_old3 = T_new3.copy()
+    for i in range(1,IM-1):
+      for  j in range(1,JM-1):
+        T_new3[i,j] = (1-ω_opt)*T_old3[i,j]+(ω_opt/(2*(1+b**2)))*(T_old3[i+1,j]+T_new3[i-1,j]+(b**2)*T_old3[i,j+1]+(b**2)*T_new3[i,j-1])
+    error = np.sum(np.abs(T_new3 - T_old3))
+    e03.append(np.log10(np.max(error)))
+    if np.max(error) < 1e-3:
+      break
+  print("Number of iterations used in Point Successive Over Relaxation scheme is ",t)
+  return T_new3,e03
+
+# After computing temperature and convergence values from each scheme, i get back the values using
+# T_new1, e01, T_new2, e02, T_new3,e03 where 1,2,3 indicates the PJ,PSG,PSOR scheme
+# respectively and T_new,e0 represents updated temperature and convergence values respectively.
+# The reason to use T_new instead of T_num so that the values in T_num won't get disturbed.
+
+
+T1,e1 = PJ(IM,JM,b,T_num.copy())
+T2,e2 = PGS(IM,JM,b,T_num.copy())
+T3,e3 = PSOR(IM,JM,b,T_num.copy(),ω_opt)
+
+# Here I use variable T1,e1, T2,e2, T3,e3 to get the values from T_new and e0
+# and stored it in these variable for ploting purpose.
+
+
+#*******************************************************************************
+# Exact solution
+#*******************************************************************************
+
+# for x = 0.5 line
+
+exact_x = np.zeros(JM)
+for j in range(JM):
+  for n in range(1,100):
+    exact_x[j] += 500*((1-(-1)**n)*np.sinh((n*np.pi*(H-y[j]))/(L))*np.sin(n*np.pi*0.5/L))/(n*np.pi*np.sinh((n*np.pi*H)/(L)))
+
+# for y = 1 line
+
+exact_y = np.zeros(IM)
+for i in range(IM):
+  for n in range(1,100):
+    exact_y[i] += 500*((1-(-1)**n)*np.sinh((n*np.pi*(H-1))/(L))*np.sin(n*np.pi*x[i]/L))/(n*np.pi*np.sinh((n*np.pi*H)/(L)))
+
+# In above exact_x and exact_y represents the exact values for Temperature along
+# X = 0.5 line and Y = 1 line respectively which is calucaluted from the formula
+# given in instruction PDF.
+
+# Plot the final temperature distribution for Point Jacobi
+plt.figure()
+plt.contourf(x,y,T1.T,cmap = 'hot', levels = 256)
+plt.colorbar(label = 'Temperature (℃)')
+plt.xlabel('X (M)')
+plt.ylabel('Y (M)')
+plt.title('Temperature Distribution for Point Jacobi')
+plt.grid(True)
+plt.show()
+#fig, axs = plt.subplots(1, 3, figsize=(10, 12))
+#cmap = axs[0].contourf(x, y, T1.T, cmap='hot', levels=256)
+#fig.colorbar(cmap, ax=axs[0], label='Temperature (℃)')
+#axs[0].set_xlabel('X (M)')
+#axs[0].set_ylabel('Y (M)')
+#axs[0].set_title('Temperature Distribution')
+#axs[0].grid(True)
+
+# Plot the final temperature distribution for Point Gauss Seidal
+plt.figure()
+plt.contourf(x,y,T2.T,cmap = 'hot', levels = 256)
+plt.colorbar(label = 'Temperature (℃)')
+plt.xlabel('X (M)')
+plt.ylabel('Y (M)')
+plt.title('Temperature Distribution for Point Gauss Seidal')
+plt.grid(True)
+plt.show()
+#cmap = axs[1].contourf(x, y, T2.T, cmap='hot', levels=256)
+#fig.colorbar(cmap, ax=axs[1], label='Temperature (℃)')
+#axs[1].set_xlabel('X (M)')
+#axs[1].set_ylabel('Y (M)')
+#axs[1].set_title('Temperature Distribution')
+#axs[1].grid(True)
+
+# Plot the final temperature distribution for Point Successive Over Relaxation
+plt.figure()
+plt.contourf(x,y,T3.T,cmap = 'hot', levels = 256)
+plt.colorbar(label = 'Temperature (℃)')
+plt.xlabel('X (M)')
+plt.ylabel('Y (M)')
+plt.title('Temperature Distribution for Point Successive Over Relaxation')
+plt.grid(True)
+plt.show()
+#cmap = axs[2].contourf(x, y, T3.T, cmap='hot', levels=256)
+#fig.colorbar(cmap, ax=axs[2], label='Temperature (℃)')
+#axs[2].set_xlabel('X (M)')
+#axs[2].set_ylabel('Y (M)')
+#axs[2].set_title('Temperature Distribution')
+#axs[2].grid(True)
+
+#plt.tight_layout()
+#plt.show()
+
+# Plotting the exact solutions and the numerical solution along x = 0.5 line
+plt.figure(figsize=(10, 6))
+plt.plot(y, exact_x, label='Exact solution along x = 0.5')
+plt.plot(y, T1[int(IM / 2), :], label='Numerical solution for Point Jacobi')
+plt.plot(y, T2[int(IM / 2), :], label='Numerical solution for Point Gauss Seidal')
+plt.plot(y, T3[int(IM / 2), :], label='Numerical solution for Point Successive Over Relaxation')
+plt.xlabel('Position along Height (M)')
+plt.ylabel('Temperature (℃)')
+plt.title('Comparison of Exact and Numerical Solutions for X = 0.5 Line')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Plotting the exact solutions and the numerical solution along y = 1 line
+plt.figure(figsize=(10, 6))
+plt.plot(x, exact_y, label='Exact solution along y = 1')
+plt.plot(x, T1[:, int(JM / 2)], label='Numerical solution for Point Jacobi')
+plt.plot(x, T2[:, int(JM / 2)], label='Numerical solution for Point Gauss Seidal')
+plt.plot(x, T3[:, int(JM / 2)], label='Numerical solution for Point Successive Over Relaxation')
+plt.xlabel('Position along Length (M)')
+plt.ylabel('Temperature (℃)')
+plt.title('Comparison of Exact and Numerical Solutions for y = 1 Line')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Plot t (iteration number) versus log10(error)
+plt.figure(figsize=(10, 6))
+i1 = range(1, len(e01) + 1)  # i1 is the number of iterations used for PJ Scheme
+i2 = range(1, len(e02) + 1)  # i2 is the number of iterations used for PSG Scheme
+i3 = range(1, len(e03) + 1)  # i3 is the number of iterations used for PSOR Scheme
+plt.plot(i1, e1, label = 'Point Jacobi' )
+plt.plot(i2, e2, label = 'Point Gauss Seidal')
+plt.plot(i3, e3, label = 'Point successive Over Relaxation')
+plt.xlabel('Iteration')
+plt.ylabel('log10(Error)')
+plt.title('convergence behaviour')
+plt.legend()
+plt.grid(True)
+plt.show()
