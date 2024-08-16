@@ -1,0 +1,219 @@
+# importing the necessary Libraries for the simulation
+import numpy as np
+import matplotlib.pyplot as plt
+
+L = 1                           # length of the shock tube
+N = 201                         # number of grid in x-direction
+dx = L / (N - 1)                # grid size in x-direction
+x = np.linspace(0, L, N)        # diving the x with 200 equally spaced points
+x_exp = np.linspace(0, L, 101)  # grid points for exact solution
+nu = 0.5                        # CFL number, 0.5 is chosen for stability
+
+p = np.zeros(N)  # pre-allocating the Pressure
+T = np.zeros(N)  # pre-allocating the Temperature
+u = np.zeros(N)  # pre-allocating the Velocity
+F = np.zeros((3, N))  # pre-allocating total Flux vector for Van Leer method
+
+# Set initial conditions
+for i in range(N):
+  if x[i] < 0.5:
+    p[i] = 5 * 101325  # 5 atm in Pa
+    T[i] = 300         # 300 K
+    u[i] = 0           # initial velocity is zero
+  else:
+    p[i] = 101325  # 1 atm in Pa
+    T[i] = 300     # 300 K
+    u[i] = 0       # initial velocity is zero
+
+r = p/(287 * T)                  # r is density, density is calculated from theromdynamic state equation i.e., P = ⍴RT
+ru = r * u                       # density * velocity
+E = (p/0.4) + (0.5 * r * u**2)   # Total energy i.e., E = (p/(𝜸 - 1)) + 1/2 * ⍴ * u2
+a = np.sqrt(1.4 * 287 * T)       # speed of sound i.e., a = sqrt(𝜸RT)
+
+# In this function, positive and negative fluxes for van Leer method is calculated
+
+def fluxes(p, T, u, r, F):
+
+    F_plus = np.zeros((3, N))  # pre-allocating the positive flux
+    F_minus = np.zeros((3, N)) # pre-allocating the negative flux
+
+    a = np.sqrt(1.4 * 287 * T) # calculating speed of sound
+    M = u / a                  # calculating Mach number
+
+
+    for i in range(N):
+      # if M <= -1 positive and negative flux are calculated according to the below function
+        if M[i] <= -1:
+            F_plus[:, i] = 0
+
+            F_minus[:, i] = F[:, i]
+
+        elif -1 < M[i] < 1:
+          # if -1 < M < 1 positive and negative flux are calculated according to the below function
+            F_plus[0, i] = 0.25 * r[i] * a[i] * (M[i]+1)**2
+            F_plus[1, i] = (0.25 * r[i] * a[i] * (M[i]+1)**2) * ((1 + 0.2 * M[i]) * 2 * a[i] / 1.4)
+            F_plus[2, i] = (0.25 * r[i] * a[i] * (M[i]+1)**2) * ((1 + 0.2 * M[i])**2 * 2 * a[i]**2 / (1.4**2 - 1))
+
+            F_minus[:, i] = F[:, i] - F_plus[:, i]
+
+        elif M[i] >= 1:
+          # if M >= 1 positive and negative flux are calculated according to the below function
+            F_plus[:, i] = F[:, i]
+
+            F_minus[:, i] = 0
+
+    return F_plus, F_minus
+
+# below function is used to calculate the time step to proceed further the simulation
+def time_step(u,a):
+  return nu * dx / (np.max(np.abs(u) + np.abs(a)))
+
+t = 0  # initially time t = 0 is given to start the simulation and the below while loop will further the simulation according to the
+        # time step calculated in above function
+
+while t <= 0.75e-3:  # final time to stop the simulation is 0.00075
+
+  F[0, :] = r * u   # this will calculate the first row for total flux vector
+  F[1, :] = (r * u**2) + p  # this will calculate the second row for total flux vector
+  F[2, :] = ((p/0.4) + (r * u**2 * 0.5) + p) * u  # this will calculate the third row for total flux vector
+
+  F_plus, F_minus = fluxes(p, T, u, r, F)   # this will call the function 'fluxes' and assign the calculated positive and negative fluxes to ' F_plus, F_minus ' respectively
+
+  dt = time_step(u,a)  # this will call the function 'time_step' and assign the calculated time step to ' dt '
+
+  for i in range(1,N-1):
+    r[i] -=  (dt/dx)* ( (F_plus[0, i] - F_plus[0, i-1]) +(F_minus[0, i+1] - F_minus[0, i]))   # this will calculate the first row for 'U' vector
+    ru[i] -= (dt/dx) *( (F_plus[1, i] - F_plus[1, i-1]) + (F_minus[1, i+1] - F_minus[1, i]))  # this will calculate the second row for 'U' vector
+    E[i] -= (dt/dx) *( (F_plus[2, i] - F_plus[2, i-1]) + (F_minus[2, i+1] - F_minus[2, i]))   # this will calculate the third row for 'U' vector
+
+  # below ' for loop ' will calculate the velocity, density, Temperature and speed of sound for the updated time step respectively
+  for i in range(N):
+    u[i] = ru[i] / r[i]
+    p[i] = (E[i] - (0.5 * r[i] * u[i] ** 2)) * 0.4
+    T[i] = p[i] / (r[i] * 287)
+    a[i] = np.sqrt(1.4 * 287 * T[i])
+
+  t += dt  # this will further the time to new time step
+
+# below P_exp, T_exp, u_exp and r_exp are exact solutions of pressure, temperature, velocity and density respectively which is used to
+# compare with above computed values.
+
+p_exp = [506625,506625,506625,506625,506625,506625,506625,506625,506625,506625,506625,506625,506625,506625,506625,506625,506625,506625,
+         506625,506625,506625,506625,506625,506625,505737,483503,462112,441537,421753,402733,384453,366890,350018,333816,318261,303332,
+         289006,275265,262088,249455,237347,225747,215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,
+         215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,
+         215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,215607,101325,101325,101325,
+         101325,101325,101325,101325,101325,101325,101325,101325,101325,101325,101325]
+
+
+T_exp = [300,300,300,300,300,300,300,300,300,300,300,300,300,300,300,300,300,300,300,300,300,300,300,300,299.85,296.023,292.22,288.442,
+         284.689,280.96,277.256,273.576,269.921,266.291,262.685,259.103,255.547,252.014,248.507,245.024,241.565,238.132,235.025,235.025,
+         235.025,235.025,235.025,235.025,235.025,235.025,235.025,235.025,235.025,235.025,235.025,235.025,235.025,235.025,235.025,235.025,
+         235.025,235.025,235.025,235.025,235.025,376.875,376.875,376.875,376.875,376.875,376.875,376.875,376.875,376.875,376.875,376.875,
+         376.875,376.875,376.875,376.875,376.875,376.875,376.875,376.875,376.875,376.875,376.875,300,300,300,300,300,300,300,300,300,300,300,300,300,300]
+
+u_exp = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.435036,11.5461,22.6573,33.7684,44.8795,55.9906,67.1017,78.2128,89.3239,100.435,
+         111.546,122.657,133.768,144.879,155.991,167.102,178.213,189.324,199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,
+         199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,
+         199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,199.445,
+         199.445,199.445,199.445,199.445,199.445,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+
+r_exp = [5.88415,5.88415,5.88415,5.88415,5.88415,5.88415,5.88415,5.88415,5.88415,5.88415,5.88415,5.88415,5.88415,5.88415,5.88415,5.88415,
+         5.88415,5.88415,5.88415,5.88415,5.88415,5.88415,5.88415,5.88415,5.87678,5.69105,5.51005,5.33368,5.16185,4.99449,4.83149,4.67278,
+         4.51827,4.36787,4.2215,4.07908,3.94054,3.80578,3.67474,3.54733,3.42348,3.30311,3.19644,3.19644,3.19644,3.19644,3.19644,3.19644,
+         3.19644,3.19644,3.19644,3.19644,3.19644,3.19644,3.19644,3.19644,3.19644,3.19644,3.19644,3.19644,3.19644,3.19644,3.19644,3.19644,
+         3.19644,1.99335,1.99335,1.99335,1.99335,1.99335,1.99335,1.99335,1.99335,1.99335,1.99335,1.99335,1.99335,1.99335,1.99335,1.99335,
+         1.99335,1.99335,1.99335,1.99335,1.99335,1.99335,1.99335,1.17683,1.17683,1.17683,1.17683,1.17683,1.17683,1.17683,1.17683,1.17683,
+         1.17683,1.17683,1.17683,1.17683,1.17683]
+
+# this will plot and compare the pressure values between exact solution and numerical solution
+plt.figure()
+plt.plot(x,p, label = 'Numerical')
+plt.plot(x_exp,p_exp, label = 'Exact solution')
+plt.xlabel('Position along Length (M)')
+plt.ylabel('Pressure (pa)')
+plt.title('Comparision between numerical and exact solution for pressure')
+plt.legend()
+plt.grid(True)
+plt.show
+
+# this will plot and compare the Temperature values between exact solution and numerical solution
+plt.figure()
+plt.plot(x,T, label = 'Numerical')
+plt.plot(x_exp,T_exp, label = 'Exact solution')
+plt.xlabel('Position along Length (M)')
+plt.ylabel('Temperature (K)')
+plt.title('Comparision between numerical and exact solution for Temperature')
+plt.legend()
+plt.grid(True)
+plt.show
+
+# this will plot and compare the velocity values between exact solution and numerical solution
+plt.figure()
+plt.plot(x,u, label = 'Numerical')
+plt.plot(x_exp,u_exp, label = 'Exact solution')
+plt.xlabel('Position along Length (M)')
+plt.ylabel('Velocity (m/s)')
+plt.title('Comparision between numerical and exact solution for velocity')
+plt.legend()
+plt.grid(True)
+plt.show
+
+# this will plot and compare the density values between exact solution and numerical solution
+plt.figure()
+plt.plot(x,r, label = 'Numerical')
+plt.plot(x_exp,r_exp, label = 'Exact solution')
+plt.xlabel('Position along Length (M)')
+plt.ylabel('Density (kg/m3)')
+plt.title('Comparision between numerical and exact solution for density')
+plt.legend()
+plt.grid(True)
+plt.show
+
+def comp_solve(zeta,eta,Z,E,X,Y):
+
+    #Defining Initial and boundary conditions
+    psi=np.zeros((101,26)) #Stream function in physical domain
+    psi[:,25]=100
+    for i in range(101):
+        psi[i, :] = np.linspace(psi[i, 0], psi[i, 25], 26)
+    deta = eta[1] - eta[0]
+    dzeta = zeta[1] - zeta[0]
+
+    A = np.zeros((101, 26))
+    B = np.zeros((101, 26))
+    C = np.zeros((101, 26))
+    residual = []
+    k = np.where((zeta < 0.25) | (zeta > 0.75), 0, 1)
+    l= np.where((zeta < 0.25) | (zeta > 0.75), 1, 0)
+    err=1
+    tol=1e-5
+    psinew=psi.copy()
+    for i in range(len(zeta)):
+        for j in range(len(eta)):
+            B[i][j]=10*pi*2(1-Y[i][j])np.sin((X[i][j])*pi)/(9-np.cos((X[i][j])*pi))*2
+            A[i][j]=k[i]((B[i][j])2+(10/(9-np.cos((X[i][j])*pi)))*2)+l[i]
+            C[i][j]=(10*pi*2(1-Y[i][j])(9*np.cos((X[i][j])*pi)-(1+(np.sin((X[i][j])*pi))2))/(9-np.cos((X[i][j])*pi))*3)
+    iter=0
+    while err>tol:
+        psi=psinew.copy()
+        for i in range(1,len(zeta)-1):
+            for j in range(1,len(eta)-1):
+                psinew[i][j]=(1/(8*dzeta*2)+2*A[i][j]/deta2)(-1)(((psi[i+1][j]+psinew[i-1][j])/(16*dzeta**2))+((psi[i+1][j+1]-psi[i-1][j+1]-psi[i+1][j-1]+\
+                            psinew[i-1][j-1])/(8*deta*dzeta))B[i][j]*k[i]+k[i]((psi[i][j+1]-psinew[i][j-1])/(2*deta))C[i][j]+(((psi[i][j+1]+psinew[i][j-1])/(deta*2))*A[i][j]))
+        err=np.linalg.norm(np.abs(psinew-psi))
+        iter+=1
+        residual.append(err)
+    return psi,residual,iter
+
+    E,Z=np.meshgrid(eta,zeta)
+    X=np.zeros(np.shape(Z))
+    Y=np.zeros(np.shape(E))
+    X=4*Z
+    for i in range(len(zeta)):
+        for j in range(len(eta)):
+            if zeta[i]<0.25 or zeta[i]>0.75:
+                Y[i][j]=E[i][j]
+            else:
+                Y[i][j]=E[i][j]+(1-E[i][j])*(1-np.cos((4*zeta[i]-1)*pi))/10
+
